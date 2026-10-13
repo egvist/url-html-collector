@@ -97,14 +97,3 @@ Saved HTML, full URLs, error logs, and browser profiles may contain private info
 
 The collector's own source code is available under the [MIT License](LICENSE). Browser integration is provided by [CloakBrowser](https://github.com/CloakHQ/CloakBrowser); its wrapper and compiled browser have separate terms. See [third-party dependencies](THIRD_PARTY.md). Browser binaries are downloaded separately and are not included in this repository.
 
-## Development
-
-```bash
-python -B -m unittest -v test_collector.py
-```
-
-Tests use a simulated browser to check input validation, capture modes, error handling, and resume behavior. They do not verify Cloudflare access on live sites.
-
-## Publishing this repository
-
-Commit the source code, README, license, third-party notice, requirements, tests, example URL file, and `.gitignore`. Local text files such as `new.txt`, saved HTML/JSONL, logs, the default browser profile, and virtual environments are ignored. Custom profile directories and other session exports must also be excluded if stored inside the project. Review `git status --short` before committing.
