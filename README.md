@@ -75,6 +75,16 @@ The example selector must be replaced with one from your target site. The applic
 
 ## Output and options
 
+Limit a run to the first 30 pending URLs:
+
+```bash
+python collector.py --urls urls.txt --auto --resume --limit 30
+```
+
+The limit applies after filtering already saved URLs with `--resume`. Failed and manually skipped URLs count toward the limit, so this means at most 30 URL attempts, not necessarily 30 successful captures. It is supported for URL inputs, not `--browse`.
+
+Press Ctrl+C to stop. Each completed record is immediately flushed and synced to the JSONL file. If Ctrl+C arrives while a record is being written, the application finishes that record before stopping, so earlier captures remain usable. A page interrupted before its record is written is not marked complete; rerun with the same output and `--resume` to retry it. Force-killing the process or a storage error can still leave an incomplete final line.
+
 `output/pages.jsonl` contains one JSON record per successful capture: `requested_url`, final `url`, `title`, `body`, and UTC `captured_at`. HTML is preserved in the `body` field. Parse these records separately to extract structured data.
 
 ```powershell
@@ -96,4 +106,3 @@ Saved HTML, full URLs, error logs, and browser profiles may contain private info
 ## License and attribution
 
 The collector's own source code is available under the [MIT License](LICENSE). Browser integration is provided by [CloakBrowser](https://github.com/CloakHQ/CloakBrowser); its wrapper and compiled browser have separate terms. See [third-party dependencies](THIRD_PARTY.md). Browser binaries are downloaded separately and are not included in this repository.
-

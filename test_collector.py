@@ -1,5 +1,6 @@
 import argparse
 import tempfile
+import signal
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -62,6 +63,51 @@ class FakeContext:
 
 
 class CollectorTests(unittest.TestCase):
+    def test_limit_applies_after_resume_and_counts_failures(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as tmp:
+            root = Path(tmp)
+            urls = root / "urls.txt"
+            urls.write_text("https://example.com/done\nhttps://example.com/fail\nhttps://example.com/first\nhttps://example.com/later", encoding="utf-8")
+            output = root / "pages.jsonl"
+            append_record(output, {"requested_url": "https://example.com/done"})
+            args = argparse.Namespace(urls=urls, output=output, errors=root / "errors.jsonl",
+                                      profile=root / "profile", resume=True, ready_selector=".profile",
+                                      timeout=1, settle=0, delay=0, limit=2)
+            context = FakeContext()
+            self.assertEqual(collect(args, lambda *a, **kw: context, BrowserError, BrowserTimeout), 1)
+            self.assertEqual(completed_urls(output), {"https://example.com/done", "https://example.com/first"})
+            self.assertNotIn("later", output.read_text())
+
+    def test_interrupt_during_navigation_preserves_previous_record(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as tmp:
+            root = Path(tmp)
+            urls = root / "urls.txt"
+            urls.write_text("https://example.com/first\nhttps://example.com/second", encoding="utf-8")
+            args = argparse.Namespace(urls=urls, output=root / "pages.jsonl", errors=root / "errors.jsonl",
+                                      profile=root / "profile", resume=False, ready_selector=".profile",
+                                      timeout=1, settle=0, delay=0)
+            context = FakeContext()
+            original = FakePage.goto
+            def interrupt_second(page, url, **kwargs):
+                if url.endswith("second"):
+                    raise KeyboardInterrupt
+                original(page, url, **kwargs)
+            with patch.object(FakePage, "goto", interrupt_second):
+                with self.assertRaises(KeyboardInterrupt):
+                    collect(args, lambda *a, **kw: context, BrowserError, BrowserTimeout)
+            self.assertTrue(context.closed)
+            self.assertEqual(completed_urls(args.output), {"https://example.com/first"})
+
+    def test_ctrl_c_during_write_finishes_record_and_restores_handler(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as tmp:
+            output = Path(tmp) / "pages.jsonl"
+            previous = signal.getsignal(signal.SIGINT)
+            with patch("collector.os.fsync", side_effect=lambda fd: signal.raise_signal(signal.SIGINT)):
+                with self.assertRaises(KeyboardInterrupt):
+                    append_record(output, {"requested_url": "https://example.com/saved"})
+            self.assertEqual(completed_urls(output), {"https://example.com/saved"})
+            self.assertEqual(signal.getsignal(signal.SIGINT), previous)
+
     def test_auto_never_prompts_and_skips_blocked_page(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as tmp:
             root = Path(tmp)

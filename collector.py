@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import signal
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -68,10 +69,24 @@ def completed_urls(path):
 
 def append_record(path, record):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8", newline="\n") as stream:
-        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    interrupted = False
+
+    def defer_interrupt(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+
+    # Finish this one record before honoring Ctrl+C, including flush/fsync.
+    previous = signal.signal(signal.SIGINT, defer_interrupt)
+    try:
+        with path.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(line)
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        signal.signal(signal.SIGINT, previous)
+    if interrupted:
+        raise KeyboardInterrupt
 
 
 def capture(page, args, requested_url=None):
@@ -139,6 +154,8 @@ def collect(args, launch, browser_error, timeout_error):
     urls = [validate_url(args.url)] if getattr(args, "url", None) else read_urls(args.urls)
     done = completed_urls(args.output) if args.resume else set()
     pending = [url for url in urls if url not in done]
+    if getattr(args, "limit", None) is not None:
+        pending = pending[:args.limit]
     if not pending:
         print("No pending URLs.")
         return 0
@@ -203,6 +220,7 @@ def main():
     parser.add_argument("--errors", type=Path, default=ROOT / "output/errors.jsonl")
     parser.add_argument("--profile", type=Path, default=ROOT / ".browser-profile")
     parser.add_argument("--resume", action="store_true", help="Skip URLs already present in output")
+    parser.add_argument("--limit", type=int, help="Maximum pending URLs to attempt in this run (failures count)")
     parser.add_argument("--auto", action="store_true", help="Capture URL(s) without prompts; wait for common challenge screens to clear")
     parser.add_argument("--ready-selector", help="Automatically save once this target-content CSS selector is visible")
     parser.add_argument("--timeout", type=float, default=120, help="Navigation/content timeout in seconds")
@@ -216,6 +234,11 @@ def main():
         parser.error("Choose --url, --urls, or --browse")
     if args.auto and args.browse:
         parser.error("--auto requires --url or --urls; --browse uses manual page selection")
+    if args.limit is not None:
+        if args.limit <= 0:
+            parser.error("--limit must be a positive integer")
+        if args.browse:
+            parser.error("--limit requires --url or --urls")
     if args.timeout <= 0 or args.delay < 0 or args.settle < 0:
         parser.error("Timeout must be positive; delay and settle must be nonnegative")
     args.output = args.output.expanduser().resolve()
@@ -236,7 +259,7 @@ def main():
             return browse(args, launch_persistent_context, Error)
         return collect(args, launch_persistent_context, Error, TimeoutError)
     except (KeyboardInterrupt, EOFError):
-        print("Stopped. Use --resume to continue saved progress.")
+        print(f"Stopped. Completed records remain in {args.output}. Use --resume to continue.")
         return 130
     except (OSError, ValueError, Error) as error:
         print(f"Error: {error}")
