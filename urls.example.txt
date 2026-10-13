@@ -1,0 +1,2 @@
+# Copy to urls.txt and replace with the pages you want to capture.
+https://example.com/

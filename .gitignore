@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.py[cod]
+.browser-profile/
+output/
+urls.txt
+.env
+.env.*
+
+# Local URL lists and captured data (keep the public examples/dependencies).
+*.txt
+!requirements.txt
+!urls.example.txt
+*.jsonl
+*.html
+*.htm
+*.log
+
+# Browser downloads, session exports, and credentials.
+.cloakbrowser/
+.cache/
+ms-playwright/
+storage_state*.json
+state.json
+cookies*.json
+license.key
+*.pem
+*.key
