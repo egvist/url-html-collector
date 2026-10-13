@@ -54,6 +54,8 @@ Use `--auto` with a single URL or URL list to save without pressing Enter:
 
 ```bash
 python collector.py --urls urls.txt --auto --resume
+# Process at most 30 pending URLs in this run
+python collector.py --urls urls.txt --auto --resume --limit 30
 python collector.py --url "https://example.com/profile" --auto
 ```
 
